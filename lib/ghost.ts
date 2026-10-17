@@ -22,6 +22,9 @@ export function mountGhostDecorations(doc: Document): () => void {
     [data-composer-prediction-ghost]:not([hidden]) { display:flex; align-items:baseline; }
     [data-composer-prediction-ghost] span { min-width:0; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; }
     [data-composer-prediction-ghost] kbd { flex-shrink:0; margin-left:.65em; padding:0 .35em; border:1px solid currentColor; border-radius:4px; font:10px/1.5 ui-monospace,monospace; opacity:.8; white-space:nowrap; }
+    /* Fork: the Tab label is a tap target too -- phones have no Tab key. Only the label takes pointers. */
+    [data-composer-prediction-ghost] kbd { pointer-events:auto; cursor:pointer; touch-action:manipulation; }
+    @media (pointer: coarse) { [data-composer-prediction-ghost] kbd { font-size:13px; padding:.15em .6em; } }
   `;
   doc.head.append(style);
   type Decoration = { editor: HTMLElement; update(): void; dispose(): void };
@@ -37,7 +40,6 @@ export function mountGhostDecorations(doc: Document): () => void {
     const overlay = doc.createElement("div");
     overlay.dataset.composerPredictionGhost = "";
     overlay.setAttribute("aria-hidden", "true");
-    overlay.inert = true;
     const text = doc.createElement("span");
     const key = doc.createElement("kbd"); key.textContent = "Tab";
     overlay.append(text, key); parent.append(overlay);
@@ -69,16 +71,23 @@ export function mountGhostDecorations(doc: Document): () => void {
       delete editor.dataset.composerPredictionActive;
       binding.dismiss();
     }
+    function accept(): boolean {
+      update();
+      if (!visible || !binding.accept()) return false;
+      dismissed = true; visible = false; overlay.hidden = true;
+      delete editor.dataset.composerPredictionActive;
+      return true;
+    }
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
       if (event.key === "Escape" && visible) { dismiss(); return; }
       if (event.key !== "Tab" || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing || event.keyCode === 229 || composing) return;
-      update();
-      if (!visible || !binding.accept()) return;
-      dismissed = true; visible = false; overlay.hidden = true;
-      delete editor.dataset.composerPredictionActive;
+      if (!accept()) return;
       event.preventDefault(); event.stopImmediatePropagation();
     };
+    // Tapping the label does what Tab does. pointerdown keeps the editor's focus.
+    key.addEventListener("pointerdown", event => { event.preventDefault(); event.stopPropagation(); });
+    key.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); if (!composing) accept(); });
     const onCompositionStart = () => { composing = true; dismiss(); update(); };
     const onCompositionEnd = () => { composing = false; update(); };
     editor.addEventListener("keydown", onKey, true);

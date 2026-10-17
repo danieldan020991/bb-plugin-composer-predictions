@@ -95,3 +95,18 @@ test("explicit regeneration can show the same words after a dismissal", () => {
   f.setGeneration("two");
   assert.equal(f.doc.querySelector<HTMLElement>("[data-composer-prediction-ghost]")!.hidden, false); f.cleanup();
 });
+test("tapping the Tab key label accepts like Tab (phones have no Tab key), never submits", () => {
+  const f = fixture(); let submitted = 0;
+  f.doc.querySelector("form")!.addEventListener("submit", () => submitted++);
+  const key = f.doc.querySelector<HTMLElement>("[data-composer-prediction-ghost] kbd")!;
+  assert.ok(key, "the Tab label exists");
+  const overlay = key.closest<HTMLElement>("[data-composer-prediction-ghost]")!;
+  assert.ok(overlay.inert !== true && !overlay.hasAttribute("inert"), "an inert overlay swallows the tap");
+  const down = new f.dom.window.Event("pointerdown", { bubbles: true, cancelable: true }); key.dispatchEvent(down);
+  assert.equal(down.defaultPrevented, true, "pointerdown keeps the editor focus");
+  key.dispatchEvent(new f.dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+  assert.equal(f.accepted(), 1); assert.equal(submitted, 0); assert.equal(f.editor.textContent, "Show me the diff");
+  key.dispatchEvent(new f.dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+  assert.equal(f.accepted(), 1, "a hidden ghost does not accept again");
+  f.cleanup();
+});

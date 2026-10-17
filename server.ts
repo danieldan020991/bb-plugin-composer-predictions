@@ -57,8 +57,20 @@ export default async function plugin(bb: BbPluginApi) {
     if (modelSelection) return { selection: modelSelection, pickerDefault: modelSelection };
     try {
       const options = await bb.sdk.system.executionOptions();
-      const model = options.models.find(row => row.isDefault) ?? options.models[0];
-      const providerId = model?.routeProviderId ?? options.providers.find(row => row.available)?.id;
+      let model = options.models.find(row => row.isDefault) ?? options.models[0];
+      let providerId = model?.routeProviderId ?? options.providers.find(row => row.available)?.id;
+      // Fork: on bb 0.46.1 executionOptions() lists the providers but no models
+      // (measured 17.10.2026: models 0, four providers available). Ask the
+      // providers themselves, as the picker does, before giving up.
+      if (!model) {
+        for (const provider of options.providers.filter(row => row.available)) {
+          try {
+            const catalog = await bb.sdk.providers.models({ providerId: provider.id });
+            const found = catalog.models.find(row => row.isDefault) ?? catalog.models[0];
+            if (found) { model = found as typeof model; providerId = provider.id; break; }
+          } catch (error) { bb.log.warn(`Model catalog of ${provider.id}: ${String(error)}`); }
+        }
+      }
       const seed = model && providerId ? modelSelectionSchema.safeParse({ providerId, model: model.model, reasoningLevel: model.defaultReasoningEffort }) : null;
       // Fork: say WHY the picker has no default, instead of a silent "catalog unavailable".
       if (!seed?.success) bb.log.warn(`Model catalog without picker default: ${JSON.stringify({

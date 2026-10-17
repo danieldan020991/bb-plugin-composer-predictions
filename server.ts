@@ -60,8 +60,16 @@ export default async function plugin(bb: BbPluginApi) {
       const model = options.models.find(row => row.isDefault) ?? options.models[0];
       const providerId = model?.routeProviderId ?? options.providers.find(row => row.available)?.id;
       const seed = model && providerId ? modelSelectionSchema.safeParse({ providerId, model: model.model, reasoningLevel: model.defaultReasoningEffort }) : null;
+      // Fork: say WHY the picker has no default, instead of a silent "catalog unavailable".
+      if (!seed?.success) bb.log.warn(`Model catalog without picker default: ${JSON.stringify({
+        models: options.models.length, providers: options.providers.map(row => ({ id: row.id, available: row.available })),
+        model: model ? { model: model.model, routeProviderId: model.routeProviderId, isDefault: model.isDefault, defaultReasoningEffort: model.defaultReasoningEffort } : null,
+        providerId: providerId ?? null, issues: seed && !seed.success ? seed.error.issues : null })}`);
       return { selection: null, pickerDefault: seed?.success ? seed.data : null };
-    } catch { return { selection: null, pickerDefault: null }; }
+    } catch (error) {
+      bb.log.warn(`Model catalog unavailable: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
+      return { selection: null, pickerDefault: null };
+    }
   }
   function changeModel(next: ModelSelection | null): Promise<ModelSettings> {
     const result = modelWrite.then(async () => {
